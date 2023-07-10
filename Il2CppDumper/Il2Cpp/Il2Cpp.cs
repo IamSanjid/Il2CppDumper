@@ -48,56 +48,60 @@ namespace Il2CppDumper
             this.metadataUsagesCount = metadataUsagesCount;
         }
 
-        protected bool AutoPlusInit(ulong codeRegistration, ulong metadataRegistration)
+        public Il2CppCodeRegistration GetAutoIl2CppCodeRegistration(ulong addr)
         {
-            if (codeRegistration != 0)
+            Il2CppCodeRegistration codeRegistration;
+            var limit = this is WebAssemblyMemory ? 0x35000u : 0x50000u; //TODO
+            if (Version >= 24.2)
             {
-                var limit = this is WebAssemblyMemory ? 0x35000u : 0x50000u; //TODO
-                if (Version >= 24.2)
+                codeRegistration = MapVATR<Il2CppCodeRegistration>(addr);
+                if (Version == 29)
                 {
-                    pCodeRegistration = MapVATR<Il2CppCodeRegistration>(codeRegistration);
-                    if (Version == 29)
+                    if (codeRegistration.genericMethodPointersCount > limit)
                     {
-                        if (pCodeRegistration.genericMethodPointersCount > limit)
-                        {
-                            Version = 29.1;
-                            codeRegistration -= PointerSize * 2;
-                            Console.WriteLine($"Change il2cpp version to: {Version}");
-                        }
+                        Version = 29.1;
+                        addr -= PointerSize * 2;
+                        Console.WriteLine($"Change il2cpp version to: {Version}");
                     }
-                    if (Version == 27)
+                }
+                if (Version == 27)
+                {
+                    if (codeRegistration.reversePInvokeWrapperCount > limit)
                     {
-                        if (pCodeRegistration.reversePInvokeWrapperCount > limit)
-                        {
-                            Version = 27.1;
-                            codeRegistration -= PointerSize;
-                            Console.WriteLine($"Change il2cpp version to: {Version}");
-                        }
+                        Version = 27.1;
+                        addr -= PointerSize;
+                        Console.WriteLine($"Change il2cpp version to: {Version}");
                     }
-                    if (Version == 24.4)
+                }
+                if (Version == 24.4)
+                {
+                    addr -= PointerSize * 2;
+                    if (codeRegistration.reversePInvokeWrapperCount > limit)
                     {
-                        codeRegistration -= PointerSize * 2;
-                        if (pCodeRegistration.reversePInvokeWrapperCount > limit)
-                        {
-                            Version = 24.5;
-                            codeRegistration -= PointerSize;
-                            Console.WriteLine($"Change il2cpp version to: {Version}");
-                        }
+                        Version = 24.5;
+                        addr -= PointerSize;
+                        Console.WriteLine($"Change il2cpp version to: {Version}");
                     }
-                    if (Version == 24.2)
+                }
+                if (Version == 24.2)
+                {
+                    if (codeRegistration.interopDataCount == 0) //TODO
                     {
-                        if (pCodeRegistration.interopDataCount == 0) //TODO
-                        {
-                            Version = 24.3;
-                            codeRegistration -= PointerSize * 2;
-                            Console.WriteLine($"Change il2cpp version to: {Version}");
-                        }
+                        Version = 24.3;
+                        addr -= PointerSize * 2;
+                        Console.WriteLine($"Change il2cpp version to: {Version}");
                     }
                 }
             }
-            Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
+
+            return MapVATR<Il2CppCodeRegistration>(addr);
+        }
+
+        protected bool AutoPlusInit(Il2CppCodeRegistration codeRegistration, ulong metadataRegistration)
+        {
+            Console.WriteLine("CodeRegistration CodegenModule List: {0:x}", codeRegistration?.codeGenModules);
             Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
-            if (codeRegistration != 0 && metadataRegistration != 0)
+            if (codeRegistration != null && metadataRegistration != 0)
             {
                 Init(codeRegistration, metadataRegistration);
                 return true;
@@ -105,15 +109,14 @@ namespace Il2CppDumper
             return false;
         }
 
-        public virtual void Init(ulong codeRegistration, ulong metadataRegistration)
+        public virtual void Init(Il2CppCodeRegistration codeRegistration, ulong metadataRegistration)
         {
-            pCodeRegistration = MapVATR<Il2CppCodeRegistration>(codeRegistration);
+            pCodeRegistration = codeRegistration;
             var limit = this is WebAssemblyMemory ? 0x35000u : 0x50000u; //TODO
             if (Version == 27 && pCodeRegistration.invokerPointersCount > limit)
             {
                 Version = 27.1;
                 Console.WriteLine($"Change il2cpp version to: {Version}");
-                pCodeRegistration = MapVATR<Il2CppCodeRegistration>(codeRegistration);
             }
             if (Version == 27.1)
             {
@@ -137,13 +140,11 @@ namespace Il2CppDumper
             {
                 Version = 24.5;
                 Console.WriteLine($"Change il2cpp version to: {Version}");
-                pCodeRegistration = MapVATR<Il2CppCodeRegistration>(codeRegistration);
             }
             if (Version == 24.2 && pCodeRegistration.codeGenModules == 0) //TODO
             {
                 Version = 24.3;
                 Console.WriteLine($"Change il2cpp version to: {Version}");
-                pCodeRegistration = MapVATR<Il2CppCodeRegistration>(codeRegistration);
             }
             pMetadataRegistration = MapVATR<Il2CppMetadataRegistration>(metadataRegistration);
             genericMethodPointers = MapVATR<ulong>(pCodeRegistration.genericMethodPointers, pCodeRegistration.genericMethodPointersCount);
@@ -230,17 +231,20 @@ namespace Il2CppDumper
             }
             genericMethodTable = MapVATR<Il2CppGenericMethodFunctionsDefinitions>(pMetadataRegistration.genericMethodTable, pMetadataRegistration.genericMethodTableCount);
             methodSpecs = MapVATR<Il2CppMethodSpec>(pMetadataRegistration.methodSpecs, pMetadataRegistration.methodSpecsCount);
-            foreach (var table in genericMethodTable)
+            if (genericMethodPointers.Length > 0)
             {
-                var methodSpec = methodSpecs[table.genericMethodIndex];
-                var methodDefinitionIndex = methodSpec.methodDefinitionIndex;
-                if (!methodDefinitionMethodSpecs.TryGetValue(methodDefinitionIndex, out var list))
+                foreach (var table in genericMethodTable)
                 {
-                    list = new List<Il2CppMethodSpec>();
-                    methodDefinitionMethodSpecs.Add(methodDefinitionIndex, list);
+                    var methodSpec = methodSpecs[table.genericMethodIndex];
+                    var methodDefinitionIndex = methodSpec.methodDefinitionIndex;
+                    if (!methodDefinitionMethodSpecs.TryGetValue(methodDefinitionIndex, out var list))
+                    {
+                        list = new List<Il2CppMethodSpec>();
+                        methodDefinitionMethodSpecs.Add(methodDefinitionIndex, list);
+                    }
+                    list.Add(methodSpec);
+                    methodSpecGenericMethodPointers.Add(methodSpec, genericMethodPointers[table.indices.methodIndex]);
                 }
-                list.Add(methodSpec);
-                methodSpecGenericMethodPointers.Add(methodSpec, genericMethodPointers[table.indices.methodIndex]);
             }
         }
 

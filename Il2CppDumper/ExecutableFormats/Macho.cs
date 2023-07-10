@@ -67,7 +67,7 @@ namespace Il2CppDumper
             }
         }
 
-        public override void Init(ulong codeRegistration, ulong metadataRegistration)
+        public override void Init(Il2CppCodeRegistration codeRegistration, ulong metadataRegistration)
         {
             base.Init(codeRegistration, metadataRegistration);
             methodPointers = methodPointers.Select(x => x - 1).ToArray();
@@ -124,7 +124,7 @@ namespace Il2CppDumper
                                 var codeRegistration = DecodeMov(buff) + subaddr + 22u;
                                 Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
                                 Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
-                                Init(codeRegistration, metadataRegistration);
+                                Init(MapVATR<Il2CppCodeRegistration>(codeRegistration), metadataRegistration);
                                 return true;
                             }
                         }
@@ -164,7 +164,7 @@ namespace Il2CppDumper
                                 var codeRegistration = DecodeMov(buff) + subaddr + 26u;
                                 Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
                                 Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
-                                Init(codeRegistration, metadataRegistration);
+                                Init(MapVATR<Il2CppCodeRegistration>(codeRegistration), metadataRegistration);
                                 return true;
                             }
                         }

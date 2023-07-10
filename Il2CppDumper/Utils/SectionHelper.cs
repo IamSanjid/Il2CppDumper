@@ -164,15 +164,15 @@ namespace Il2CppDumper
             }
         }
 
-        public ulong FindCodeRegistration()
+        public Il2CppCodeRegistration FindCodeRegistration()
         {
             if (il2Cpp.Version >= 24.2)
             {
-                ulong codeRegistration;
+                Il2CppCodeRegistration codeRegistration;
                 if (il2Cpp is ElfBase)
                 {
                     codeRegistration = FindCodeRegistrationExec();
-                    if (codeRegistration == 0)
+                    if (codeRegistration is null)
                     {
                         codeRegistration = FindCodeRegistrationData();
                     }
@@ -184,7 +184,7 @@ namespace Il2CppDumper
                 else
                 {
                     codeRegistration = FindCodeRegistrationData();
-                    if (codeRegistration == 0)
+                    if (codeRegistration is null)
                     {
                         codeRegistration = FindCodeRegistrationExec();
                         pointerInExec = true;
@@ -192,7 +192,7 @@ namespace Il2CppDumper
                 }
                 return codeRegistration;
             }
-            return FindCodeRegistrationOld();
+            return il2Cpp.GetAutoIl2CppCodeRegistration(FindCodeRegistrationOld());
         }
 
         public ulong FindMetadataRegistration()
@@ -348,17 +348,17 @@ namespace Il2CppDumper
 
         private static readonly byte[] featureBytes = { 0x6D, 0x73, 0x63, 0x6F, 0x72, 0x6C, 0x69, 0x62, 0x2E, 0x64, 0x6C, 0x6C, 0x00 }; //mscorlib.dll
 
-        private ulong FindCodeRegistrationData()
+        private Il2CppCodeRegistration FindCodeRegistrationData()
         {
             return FindCodeRegistration2019(data);
         }
 
-        private ulong FindCodeRegistrationExec()
+        private Il2CppCodeRegistration FindCodeRegistrationExec()
         {
             return FindCodeRegistration2019(exec);
         }
 
-        private ulong FindCodeRegistration2019(List<SearchSection> secs)
+        private Il2CppCodeRegistration FindCodeRegistration2019(List<SearchSection> secs)
         {
             foreach (var sec in secs)
             {
@@ -382,12 +382,51 @@ namespace Il2CppDumper
                                         {
                                             if (il2Cpp.Version >= 29)
                                             {
-                                                return refva3 - il2Cpp.PointerSize * 14;
+                                                return il2Cpp.GetAutoIl2CppCodeRegistration(refva3 - il2Cpp.PointerSize * 14);
                                             }
-                                            return refva3 - il2Cpp.PointerSize * 13;
+                                            return il2Cpp.GetAutoIl2CppCodeRegistration(refva3 - il2Cpp.PointerSize * 13);
                                         }
                                     }
                                 }
+                                // Maybe stripped codreg info binary...
+                                var endOfCodegenModulesList = refva2 + il2Cpp.PointerSize;
+                                il2Cpp.Position = il2Cpp.MapVATR(endOfCodegenModulesList);
+                                while (il2Cpp.ReadNUint() != 0)
+                                {
+                                    endOfCodegenModulesList += il2Cpp.PointerSize;
+                                    il2Cpp.Position += il2Cpp.PointerSize;
+                                }
+                                //We're at the end, so walk one back to get the last valid pointer.
+                                endOfCodegenModulesList -= il2Cpp.PointerSize;
+                                //Now subtract module count * pointer size to get the start of the list.
+                                var startOfCodegenModulesList = endOfCodegenModulesList - (((ulong)imageCount - 1) * il2Cpp.PointerSize);
+
+                                il2Cpp.Position = il2Cpp.MapVATR(startOfCodegenModulesList);
+                                var firstModulePtr = il2Cpp.ReadNUint();
+                                if (firstModulePtr == 0)
+                                {
+                                    continue;
+                                }
+
+                                try
+                                {
+                                    Il2CppCodeGenModule firstModule = il2Cpp.MapVATR<Il2CppCodeGenModule>(firstModulePtr);
+                                    if (firstModule != null && firstModule.moduleName != 0)
+                                    {
+                                        string moduleName = il2Cpp.ReadStringToNull(il2Cpp.MapVATR(firstModule.moduleName));
+                                        if (string.IsNullOrWhiteSpace(moduleName) || moduleName.Any(c => !char.IsAscii(c))) 
+                                        {
+                                            continue;
+                                        }
+                                    }
+                                }
+                                catch(Exception)
+                                {
+                                    continue;
+                                }                                
+
+                                var codeReg = new Il2CppCodeRegistration { codeGenModulesCount = (ulong)imageCount, codeGenModules = startOfCodegenModulesList };
+                                return codeReg;
                             }
                             else
                             {
@@ -395,7 +434,7 @@ namespace Il2CppDumper
                                 {
                                     foreach (var refva3 in FindReference(refva2 - (ulong)i * il2Cpp.PointerSize))
                                     {
-                                        return refva3 - il2Cpp.PointerSize * 13;
+                                        return il2Cpp.GetAutoIl2CppCodeRegistration(refva3 - il2Cpp.PointerSize * 13);
                                     }
                                 }
                             }
@@ -403,7 +442,7 @@ namespace Il2CppDumper
                     }
                 }
             }
-            return 0ul;
+            return null;
         }
 
         private IEnumerable<ulong> FindReference(ulong addr)

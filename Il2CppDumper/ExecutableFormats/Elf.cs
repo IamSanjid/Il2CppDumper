@@ -141,9 +141,10 @@ namespace Il2CppDumper
                         metadataRegistration = ReadUInt32();
                     }
                 }
+                
                 Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
                 Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
-                Init(codeRegistration, metadataRegistration);
+                Init(MapVATR<Il2CppCodeRegistration>(codeRegistration), metadataRegistration);
                 return true;
             }
             return false;
@@ -180,7 +181,7 @@ namespace Il2CppDumper
                 Console.WriteLine("Detected Symbol !");
                 Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
                 Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
-                Init(codeRegistration, metadataRegistration);
+                Init(MapVATR<Il2CppCodeRegistration>(codeRegistration), metadataRegistration);
                 return true;
             }
             Console.WriteLine("ERROR: No symbol is detected");

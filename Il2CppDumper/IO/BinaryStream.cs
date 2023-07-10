@@ -61,6 +61,8 @@ namespace Il2CppDumper
 
         public uint ReadULeb128() => reader.ReadULeb128();
 
+        public ulong ReadNUint() => Is32Bit ? ReadUInt32() : ReadUInt64();
+
         public void Write(bool value) => writer.Write(value);
 
         public void Write(byte value) => writer.Write(value);
